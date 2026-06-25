@@ -1,5 +1,6 @@
 import express from 'express';
 import type { Request, Response } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
 
@@ -35,6 +36,14 @@ type TransactionInput = z.infer<typeof transactionSchema>;
 
 const idempotencyStore = new Map<string, Transaction>();
 
+const rateLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 10,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    message: { error: 'Too many requests, please try again later.' },
+});
+
 function createTransaction(input: TransactionInput): Transaction {
     const tx: Transaction = {
         id: randomUUID(),
@@ -58,7 +67,7 @@ function hasSamePayload(stored: Transaction, incoming: TransactionInput): boolea
     );
 }
 
-app.post('/transactions', (req: Request, res: Response) => {
+app.post('/transactions', rateLimiter, (req: Request, res: Response) => {
     const data = transactionSchema.safeParse(req.body);
 
     if (!data.success) {
